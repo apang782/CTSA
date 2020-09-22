@@ -1,0 +1,312 @@
+---
+title: "Appendix"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning=F,message=F)
+```
+
+## Plotting the Time Series
+
+``` {r eval=F}
+library(MASS)
+library(forecast)
+library(astsa)
+library(qpcR)
+set.seed(274)
+candyprod <- read.csv("C:/Users/A/Desktop/candy.csv", sep=",")
+candy <- candyprod[c(1:536),] # train
+testcandy <- candyprod[c(537:548),] # 12 observations for prediction
+# monthly data from Jan 1972 to Aug 2017 in the original dataset
+# training set is from Jan 1972 to Aug 2016
+# test set is from Sep 2016 to Aug 2017
+c <- ts(candy$IPG3113N, start = c(1972,1), frequency = 12)
+par(mfrow=c(1,2))
+plot.ts(c)
+fit <- lm(c ~ as.numeric(1:536)); abline(fit, col="blue") 
+abline(h=mean(c), col="blue") 
+hist(c)
+```
+
+## Transforming the Data
+
+``` {r eval=F}
+n <- 1:length(c)
+fit <- lm(c~n)
+bc <- boxcox(c~n,plotit=T)
+bc$x[which.max(bc$y)]
+```
+
+``` {r eval=F}
+lambda = 0.7474747
+tc = (1/lambda)*((c^lambda)-1)
+par(mfrow = c(1,2))
+ts.plot(c, main = "Original Data", ylab = expression(X[t]))
+ts.plot(tc, main = "Transformed Data", ylab = expression(Y[t]))
+
+hist(c, main = "Original Data")
+hist(tc, main = "Transformed Data")
+
+var(c)
+var(tc) # variance went down for transformed TS
+```
+
+``` {r eval=F}
+# looking at decomps
+par(mfrow=c(1,2))
+plot(stl(c,s.window="periodic"))
+plot(stl(tc,s.window="periodic"))
+```
+
+``` {r eval=F}
+par(mfrow = c(2,2))
+acf(c, main = "Original Data")
+acf(tc, main = "Transformed Data")
+pacf(c, main = "Original Data")
+pacf(tc, main = "Transformed Data")
+```
+
+## Removing Seasonality
+
+``` {r eval=F}
+# differencing seasonality
+tcs <- diff(tc,lag=12) # lag 12 diff
+tcss <- diff(tcs,lag=12) # lag 12 diff x2
+
+c(var(tc),var(tcs),var(tcss))
+```
+
+## Removing Trend
+
+``` {r eval=F}
+tcs1 <- diff(tcs,lag=1) # lag 12 diff & 1
+tcs2 <- diff(tcs1,lag=1) # lag 12 diff & 1 & 1
+tcsq <- diff(tcs,lag=2) # lag 12 diff & 2 -- to test for quad. trend
+tcsqq <- diff(tcsq,lag=2) # lag 12 diff & 2 & 2
+tcsc <- diff(tcs,lag=3) # lag 12 & 3 -- to test for cubic trend
+tcscc <- diff(tcs,lag=3) # lag 12 & 3 & 3
+tcscub <- diff(tcs,lag=4) # lag 12 & 4 -- to test for quartic trend
+tcscubcub <- diff(tcs,lag=3) # lag 12 & 4 & 4
+
+var(tcs) # TS with only seasonality removed
+
+once <- c(var(tcs1),var(tcsq),var(tcsc),var(tcscub))
+twice <- c(var(tcs2),var(tcsqq),var(tcscc),var(tcscubcub))
+
+data.frame(once,twice,row.names = c("lag 1","lag 2","lag 3","lag 4"))
+           col.names = c("once","twice")
+```
+
+## Visualizing the Effects of Differencing
+
+``` {r eval=F}
+par(mfrow = c(2,2))
+ts.plot(c, main = "Orig. Data")
+ts.plot(tc, main = "Tr. Data")
+ts.plot(tcs, main = "Tr. Data Diff @ 12")
+ts.plot(tcs1, main = "Tr. Data Diff @ 12&1")
+```
+
+``` {r eval=F}
+par(mfrow = c(2,2))
+acf(c, main = "Orig. Data")
+acf(tc, main = "Tr. Data")
+acf(tcs, main = "Tr.Data Diff @ 12")
+acf(tcs1, main = "Tr. Data Diff @ 12&1")
+
+pacf(c, main = "Orig. Data")
+pacf(tc, main = "Tr. Data")
+pacf(tcs, main = "Tr. Data Differenced @ 12")
+pacf(tcs1, main = "Tr. Data Differenced @ 12&1")
+```
+
+``` {r eval=F}
+par(mfrow = c(2,2))
+hist(c, main = "Original Data")
+hist(tc, main = "Transformed Data")
+hist(tcs, main = "Transformed Data Differenced at Lag 12 ")
+hist(tcs1, main = "Transformed Data Differenced at Lag 12 & 1")
+```
+
+``` {r eval=F}
+plot(stl(tcs1,s.window="periodic"), 
+     main = "Decomposition of the Transformed Data 
+     Differenced at Lag 12 & 1")
+```
+
+## Confirming Stationarity of tcs1 = ∇1∇12tr.(U_t)
+
+``` {r eval=F}
+#test for stationarity
+library(tseries)
+adf.test(tcs1)
+```
+
+## Model Identification Through ACF and PACF of tcs1 = ∇1∇12tr.(U_t)
+
+``` {r eval=F}
+# looking at acf/pacf of current best model for model candidacy
+par(mfrow = c(1,2))
+acf(tcs1, main = "ACF of Tr. Data Diff at Lag 12 & 1")
+pacf(tcs1, main = "PACF of Tr. Data Diff at Lag 12 & 1")
+acf(tcs1,lag.max=100, main = "ACF of Tr. Data Diff at Lag 12 & 1")
+pacf(tcs1,lag.max=100, main = "PACF of Tr. Data Diff at Lag 12 & 1")
+```
+
+``` {r eval=F}
+par(mfrow = c(1,2))
+acf(tcs1,lag.max=200, main = "ACF of Tr. Data Diff at Lag 12 & 1")
+pacf(tcs1,lag.max=200, main = "PACF of Tr. Data Diff at Lag 12 & 1")
+```
+
+## Exploring Potential Models
+
+``` {r eval=F}
+aicvec <- matrix(NA,nr=18,nc=2)
+
+aicvec[1,] <- c(AICc(arima(tc,order=c(1,1,1),seasonal=list(order=c(1,1,1),
+              period=12),method="ML")),"1,1,1 1,1,1")
+aicvec[2,] <- c(AICc(arima(tc,order=c(1,1,1),seasonal=list(order=c(2,1,1),
+              period=12),method="ML")),"1,1,1 2,1,1")
+aicvec[3,] <- c(AICc(arima(tc,order=c(1,1,2),seasonal=list(order=c(1,1,1),
+              period=12),method="ML")),"1,1,2 1,1,1")
+aicvec[4,] <- c(AICc(arima(tc,order=c(1,1,2),seasonal=list(order=c(2,1,1),
+              period=12),method="ML")),"1,1,2 2,1,1")
+aicvec[5,] <- c(AICc(arima(tc,order=c(1,1,4),seasonal=list(order=c(1,1,1),
+              period=12),method="ML")),"1,1,4 1,1,1")
+aicvec[6,] <- c(AICc(arima(tc,order=c(1,1,4),seasonal=list(order=c(2,1,1),
+              period=12),method="ML")),"1,1,4 2,1,1")
+aicvec[7,] <- c(AICc(arima(tc,order=c(2,1,1),seasonal=list(order=c(1,1,1),
+              period=12),method="ML")),"2,1,1 1,1,1")
+#c(AICc(arima(tc,order=c(2,1,1),seasonal=list(order=c(2,1,1),period=12),method="ML")) #non-finite finite-difference value
+#modifying into:
+aicvec[8,] <- c(AICc(arima(tc,order=c(3,1,1),seasonal=list(order=c(1,1,1),
+               period=12),method="ML")),"3,1,1 1,1,1")
+aicvec[9,] <- c(AICc(arima(tc,order=c(2,1,2),seasonal=list(order=c(1,1,1),
+              period=12),method="ML")),"2,1,2 1,1,1")
+#AICc(arima(tc,order=c(2,1,2),seasonal=list(order=c(2,1,1),period=12),method="ML")) #non-finite finite-difference value
+#modifying into:
+aicvec[10,] <- c(AICc(arima(tc,order=c(3,1,2),seasonal=list(order=c(2,1,1),
+              period=12),method="ML")),"3,1,2 2,1,1")
+aicvec[11,] <- c(AICc(arima(tc,order=c(2,1,4),seasonal=list(order=c(1,1,1),
+              period=12),method="ML")),"2,1,4 1,1,1")
+aicvec[12,] <- c(AICc(arima(tc,order=c(2,1,4),seasonal=list(order=c(2,1,1),                period=12),method="ML")),"2,1,4 2,1,1")
+aicvec[13,] <- c(AICc(arima(tc,order=c(4,1,1),seasonal=list(order=c(1,1,1),                period=12),method="ML")),"4,1,1 1,1,1")
+aicvec[14,] <- c(AICc(arima(tc,order=c(4,1,1),seasonal=list(order=c(2,1,1),                period=12),method="ML")),"4,1,1 2,1,1")
+aicvec[15,] <- c(AICc(arima(tc,order=c(4,1,2),seasonal=list(order=c(1,1,1),                period=12),method="ML")),"4,1,2 1,1,1")
+aicvec[16,] <- c(AICc(arima(tc,order=c(4,1,2),seasonal=list(order=c(2,1,1),                period=12),method="ML")),"4,1,2 2,1,1")
+#AICc(arima(tc,order=c(4,1,4),seasonal=list(order=c(1,1,1),period=12),method="ML")) #non-finite finite-difference value 
+#modifying into:
+aicvec[17,] <- c(AICc(arima(tc,order=c(3,1,4),seasonal=list(order=c(2,1,1),                period=12),method="ML")),"3,1,4 2,1,1")
+#AICc(arima(tc,order=c(4,1,4),seasonal=list(order=c(2,1,1),period=12),method="ML")) #non-finite finite-difference value 
+aicvec[18,] <- c(AICc(arima(tc,order=c(3,1,3),seasonal=list(order=c(2,1,1),                period=12),method="ML")),"3,1,3 2,1,1")
+
+aicvec[order(aicvec[,1])[1:3],]
+```
+
+``` {r eval=F}
+mod1 <- arima(tc,order=c(3,1,3),seasonal=list(order=c(2,1,1),                      period=12),method="ML")
+mod1$coef
+```
+
+``` {r eval=F}
+#SARIMA(3,1,3)x(2,1,1) Roots of AR Portion ∇1
+polyroot(c(1,-0.497412810,-0.242485932,0.656160108))
+#SARIMA(3,1,3)x(2,1,1) Roots of MA Portion ∇1
+polyroot(c(1,0.292594742,-0.006089481,-0.867089677))
+#SARIMA(3,1,3)x(2,1,1) Roots of AR Portion ∇12
+polyroot(c(1,0.025823790,-0.035384319))
+#SARIMA(3,1,3)x(2,1,1) Roots of MA Portion ∇12
+polyroot(c(1,-0.720873006))
+```
+
+``` {r eval=F}
+mod2 <- arima(tc,order=c(3,1,4),seasonal=list(order=c(2,1,1),                      period=12),method="ML")
+mod2$coef
+```
+
+``` {r eval=F}
+#SARIMA(3,1,4)x(2,1,1) Roots of AR Portion ∇1
+polyroot(c(1,-0.29335181,-0.00694476,0.85953354))
+#SARIMA(3,1,4)x(2,1,1) Roots of MA Portion ∇1
+polyroot(c(1,0.04327768,-0.15752606,-0.94670473,0.13915581))
+#SARIMA(3,1,4)x(2,1,1) Roots of AR Portion ∇12
+polyroot(c(1,0.03787631,-0.02236972 ))
+#SARIMA(3,1,4)x(2,1,1) Roots of MA Portion ∇12
+polyroot(c(1,-0.71188464))
+```
+
+## Model Diagnostics
+
+``` {r eval=F}
+library(stats)
+final<-arima(tc,order=c(3,1,3),seasonal=list(order=c(2,1,1),period=12),
+             method="ML")
+fr <- residuals(final)
+ts.plot(fr)
+abline(h = mean(fr), col = "red")
+```
+
+``` {r eval=F}
+par(mfrow=c(1,2))
+acf(fr)
+pacf(fr)
+```
+
+``` {r eval=F}
+par(mfrow = c(1,2))
+hist(fr)
+qqnorm(fr)
+qqline(fr,col="green")
+```
+
+``` {r eval=F}
+final<-arima(tc,order=c(3,1,3),seasonal=list(order=c(2,1,1),period=12),
+             method="ML")
+fr <- residuals(final)
+Box.test(fr,lag=12, type= c("Box-Pierce"), fitdf = 6)
+Box.test(fr,lag=12, type = c("Ljung-Box"), fitdf = 6)
+Box.test(fr^2,lag=12, type = c("Ljung-Box"), fitdf = 0)
+shapiro.test(fr)
+ar(fr, aic = T, order.max = NULL, method = c("yule-walker"))
+```
+
+## Spectral Analysis
+
+``` {r eval=F}
+library(TSA)
+require(TSA)
+periodogram(tc)
+```
+
+``` {r eval=F}
+library(GeneCycle)
+fisher.g.test(residuals(final))
+```
+
+``` {r eval=F}
+cpgram(residuals(final))
+```
+
+## Forecasting
+
+``` {r eval=F}
+# forecasting
+library(forecast)
+library(astsa)
+dates <- c(2016-09-01,2016-10-01,2016-11-01,2016-12-01,2017-01-01,
+           2017-02-01,2017-03-01,2017-04-01,2017-05-01,2017-06-01,
+           2017-07-01,2017-08-01)
+testval <- c(109.3191,119.0502,116.8431,116.4535,109.4666,113.4661,105.2245,
+             107.4288,101.9209,104.2022,102.5861,114.0613)
+ttestval <- (1/lambda)*((testval^lambda)-1)
+fpred <- predict(final,n.ahead=12)
+upf <- fpred$pred + 2*fpred$se
+lowf <- fpred$pred - 2*fpred$se
+ts.plot(tc)
+lines(upf, col="blue", lty="dashed")
+lines(lowf, col="blue", lty="dashed")
+points(fpred$pred, col="red")
+(citable <- data.frame(Lower=lowf, Pred =fpred$pred, Upper=upf, Actual = ttestval))
+```
